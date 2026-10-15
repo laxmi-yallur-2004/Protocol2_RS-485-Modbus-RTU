@@ -1,6 +1,3 @@
-# Protocol2_RS-485-Modunus-Rtu
-
-
 MFM384 RS485 MODBUS RTU - FINAL README
 
 Board: DC_UPS_Mother_V2 - STM32G070RBT6
@@ -39,12 +36,3 @@ V3N: 0.0 V
 
 If wire disconnected:
 COMM FAIL TIMEOUT
-
-Test:
-1. Flash code
-2. Connect meter
-3. LCD shows OK = Pass
-4. Disconnect brown wire = shows TIMEOUT = Pass for fail test
-
-This one code file covers all tasks.
-No other file needed.
