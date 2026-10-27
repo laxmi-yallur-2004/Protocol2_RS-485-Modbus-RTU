@@ -7,7 +7,7 @@
 - **Pins:** PB6 = TX, PB7 = RX, PA12 = DE, LCD = PC0-PC10
 - **Baud:** 9600
 - **ID:** 1
-- **Register:** 0x0000 (V1N, V2N, V3N)
+- **Register:** 0x0000 (V1N)
 - This code has **NO delay()**, only `millis()` and `micros()`
 
 ## Connection
@@ -38,9 +38,7 @@
 ```
 MFM384 STATUS: OK
 V1N: 244.3 V
-V2N: 0.0 V
-V3N: 0.0 V
-```
+
 
 **If wire disconnected:**
 
