@@ -40,8 +40,7 @@ MFM384 STATUS: OK
 V1N: 244.3 V
 
 
-**If wire disconnected:**
 
-```
+If wire disconnected:
 COMM FAIL TIMEOUT
 ```
