@@ -1,9 +1,8 @@
-
 #include <LiquidCrystal.h>
 
 #define MB_SLAVE_ID 1
 #define MB_BAUD 9600UL
-#define MB_RESP_TIMEOUT 300 /* timeout/retry policy */
+#define MB_RESP_TIMEOUT 300
 #define MB_RETRIES 3
 #define POLL_MS 1000
 #define PIN_DE PA12
@@ -18,7 +17,7 @@ enum State : uint8_t { ST_IDLE, ST_TX, ST_RX };
 
 static State state = ST_IDLE;
 static bool uartOk = false;
-static uint32_t t35us; // TASK 3: Silent interval timing
+static uint32_t t35us;
 static uint8_t txBuf[8];
 static uint8_t txPos;
 static uint32_t txStartUs;
@@ -26,12 +25,11 @@ static uint8_t rxBuf[24];
 static uint8_t rxLen;
 static uint32_t tLastRxUs, tReqMs, tNextMs;
 static uint8_t attempt;
-static uint8_t data[12];
+static uint8_t data[4]; // CHANGED: 12 -> 4 for V1N only
 static MbStatus lastStatus = MB_TIMEOUT;
 static char lcdLines[4][21];
 static uint8_t lcdRow = 4;
 
-// TASK 8: CRC16 correct - 0xA001 polynomial
 static uint16_t crc16(const uint8_t *b, uint16_t n)
 {
   uint16_t c = 0xFFFF;
@@ -92,30 +90,30 @@ static float regsToFloat(const uint8_t *d)
 static void buildLcdLines(void)
 {
   char s[32];
-  // TASK 6: Pass/Fail Implementation
   setLine(0, lastStatus == MB_OK? "MFM384 STATUS: OK" :
              lastStatus == MB_TIMEOUT? "COMM FAIL TIMEOUT" :
              lastStatus == MB_CRC? "COMM FAIL CRC" :
              lastStatus == MB_EXC? "METER EXCEPTION" : "COMM FAIL");
-  for (uint8_t i = 0; i < 3; i++) {
-    char v[16] = "----";
-    if (lastStatus == MB_OK) {
-      float f = regsToFloat(&data[i * 4]);
-      if (f >= 0.0f && f < 1000.0f) {
-        int v10 = (int)(f * 10.0f + 0.5f);
-        snprintf(v, sizeof v, "%d.%d V", v10 / 10, v10 % 10);
-      } else snprintf(v, sizeof v, "invalid");
-    }
-    snprintf(s, sizeof s, "V%dN: %s", i + 1, v);
-    setLine(i + 1, s);
+  
+  // V1N ONLY - REMOVED V2N, V3N
+  char v[16] = "----";
+  if (lastStatus == MB_OK) {
+    float f = regsToFloat(data);
+    if (f >= 0.0f && f < 1000.0f) {
+      int v10 = (int)(f * 10.0f + 0.5f);
+      snprintf(v, sizeof v, "%d.%d V", v10 / 10, v10 % 10);
+    } else snprintf(v, sizeof v, "invalid");
   }
+  snprintf(s, sizeof s, "V1N: %s", v);
+  setLine(1, s);
+  setLine(2, ""); // BLANK
+  setLine(3, ""); // BLANK
   lcdRow = 0;
 }
 
 static void finish(MbStatus s)
 {
   state = ST_IDLE;
-  // TASK 8: Timeout/retry policy
   if (s!= MB_OK && s!= MB_EXC && (uint8_t)(attempt + 1) < MB_RETRIES) {
     attempt++; tNextMs = millis(); return;
   }
@@ -124,27 +122,26 @@ static void finish(MbStatus s)
   buildLcdLines();
 }
 
-// TASK 8: Safe register map access - only allow safe addresses
 static bool isSafeRegister(uint16_t addr){
-  if(addr==0x0000 || addr==0x0002 || addr==0x0004 || addr==0x000E) return true; // V1N,V2N,V3N,kWh
+  if(addr==0x0000 || addr==0x0002 || addr==0x0004 || addr==0x000E) return true;
   return false;
 }
 
 static void startRequest(void)
 {
-  uint16_t startAddr = 0x0000; // TASK 5: Addressing
+  uint16_t startAddr = 0x0000;
   if(!isSafeRegister(startAddr)){ setLine(0,"SAFE MAP FAIL"); lcdRow=0; return; }
 
-  txBuf[0] = MB_SLAVE_ID; // TASK 5: Addressing
-  txBuf[1] = 0x04; // TASK 5: Function codes (Read Input)
-  txBuf[2] = 0x00; txBuf[3] = 0x00; // TASK 5: Register mapping (V1N)
-  txBuf[4] = 0x00; txBuf[5] = 0x06; // 6 regs = 3 floats
+  txBuf[0] = MB_SLAVE_ID;
+  txBuf[1] = 0x04;
+  txBuf[2] = 0x00; txBuf[3] = 0x00;
+  txBuf[4] = 0x00; txBuf[5] = 0x02; // CHANGED: 0x06 -> 0x02 (V1N ONLY)
   uint16_t c = crc16(txBuf, 6);
   txBuf[6] = (uint8_t)(c & 0xFF); txBuf[7] = (uint8_t)(c >> 8);
   txPos = 0;
   mbUart.Instance->ICR = USART_ICR_TCCF;
   uartFlushRx();
-  digitalWrite(PIN_DE, HIGH); // TASK 2: DE/RE direction control - TX
+  digitalWrite(PIN_DE, HIGH);
   txStartUs = micros();
   state = ST_TX;
 }
@@ -155,9 +152,9 @@ static void pollTx(void)
   uint32_t isr = mbUart.Instance->ISR;
   if (txPos < sizeof txBuf) {
     if (isr & USART_ISR_TXE_TXFNF) mbUart.Instance->TDR = txBuf[txPos++];
-  } else if (isr & USART_ISR_TC) { // TASK 2: Correct turnaround - wait for TC flag
+  } else if (isr & USART_ISR_TC) {
     mbUart.Instance->ICR = USART_ICR_TCCF;
-    digitalWrite(PIN_DE, LOW); // TASK 2: DE/RE - RX
+    digitalWrite(PIN_DE, LOW);
     uartFlushRx();
     rxLen = 0; tReqMs = millis(); tLastRxUs = micros();
     state = ST_RX;
@@ -168,11 +165,11 @@ static MbStatus parseFrame(void)
 {
   if (rxLen < 5) return MB_BAD;
   uint16_t rc = (uint16_t)(rxBuf[rxLen - 2] | (rxBuf[rxLen - 1] << 8));
-  if (crc16(rxBuf, (uint16_t)(rxLen - 2))!= rc) return MB_CRC; // TASK 4 & 8: CRC16 correct
+  if (crc16(rxBuf, (uint16_t)(rxLen - 2))!= rc) return MB_CRC;
   if (rxBuf[0]!= MB_SLAVE_ID) return MB_BAD;
-  if (rxBuf[1] == 0x84) return MB_EXC; // TASK 4 & 8: Exception handling
-  if (rxBuf[1]!= 0x04 || rxBuf[2]!= 12 || rxLen!= 17) return MB_BAD;
-  memcpy(data, &rxBuf[3], 12);
+  if (rxBuf[1] == 0x84) return MB_EXC;
+  if (rxBuf[1]!= 0x04 || rxBuf[2]!= 4 || rxLen!= 9) return MB_BAD; // CHANGED: 12,17 -> 4,9
+  memcpy(data, &rxBuf[3], 4);
   return MB_OK;
 }
 
@@ -187,7 +184,7 @@ static void pollRx(void)
   }
   if (rxLen == 0) {
     if ((uint32_t)(millis() - tReqMs) > MB_RESP_TIMEOUT) finish(MB_TIMEOUT);
-  } else if ((uint32_t)(micros() - tLastRxUs) >= t35us) { // TASK 3: Half-duplex + silent interval 3.5 char
+  } else if ((uint32_t)(micros() - tLastRxUs) >= t35us) {
     finish(parseFrame());
   }
 }
